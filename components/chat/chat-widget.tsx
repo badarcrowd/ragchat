@@ -524,12 +524,10 @@ export function ChatWidget({
   // Auto-start/stop voice mode when switching tabs
   useEffect(() => {
     if (chatMode === "voice") {
-      // Auto-start voice conversation when entering voice mode
-      setVoiceActive(true);
+      // Reset state when entering voice mode, but don't auto-start
+      setVoiceStatus("idle");
+      setVoiceActive(false);
       lastProcessedMessageId.current = null; // Reset message tracking
-      setTimeout(() => {
-        startVoiceRecording();
-      }, 300); // Small delay to let UI settle
     } else {
       // Cleanup when leaving voice mode
       stopVoiceConversation();
@@ -903,10 +901,10 @@ export function ChatWidget({
                   <Phone className="h-10 w-10" style={{ color: buttonColor }} />
                 </div>
                 <h2 className="text-xl font-semibold text-neutral-800">
-                  Voice Chat Active
+                  Voice Chat
                 </h2>
                 <p className="mt-3 text-sm leading-relaxed text-neutral-600">
-                  Speak naturally - I&apos;m listening! Click the microphone to stop recording, or interrupt me anytime while I&apos;m speaking.
+                  Click the microphone button below to start a voice conversation. Speak naturally and I&apos;ll respond with voice!
                 </p>
               </div>
             ) : null}
