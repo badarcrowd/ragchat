@@ -428,9 +428,11 @@ export function ChatWidget({
     } catch (error) {
       console.error("[Voice Recording Error]", error);
       setVoiceStatus("idle");
+      setVoiceActive(false); // Reset active state on any error
       if (error instanceof Error && error.name === "NotAllowedError") {
         alert("Microphone access denied. Please enable microphone permissions to use voice chat.");
-        setVoiceActive(false);
+      } else {
+        alert("Could not start recording. Please check your microphone and try again.");
       }
     }
   }
@@ -1034,14 +1036,28 @@ export function ChatWidget({
             <div className="flex flex-col items-center gap-4">
               {/* Status Text */}
               <p className="text-sm font-medium text-neutral-600">
-                {voiceStatus === "idle" && "Initializing..."}
+                {voiceStatus === "idle" && !voiceActive && "Ready to start"}
+                {voiceStatus === "idle" && voiceActive && "Initializing..."}
                 {voiceStatus === "listening" && "🎤 Listening to you..."}
                 {voiceStatus === "processing" && "⚡ Processing your message..."}
                 {voiceStatus === "speaking" && "🔊 AI is speaking..."}
               </p>
 
               {/* Main Action Button */}
-              {voiceStatus === "listening" ? (
+              {voiceStatus === "idle" && !voiceActive ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVoiceActive(true);
+                    setTimeout(() => startVoiceRecording(), 200);
+                  }}
+                  className="grid h-24 w-24 place-items-center rounded-full text-white shadow-2xl transition-all hover:scale-105 active:scale-95"
+                  style={{ backgroundColor: buttonColor }}
+                  aria-label="Start voice chat"
+                >
+                  <Mic className="h-10 w-10" />
+                </button>
+              ) : voiceStatus === "listening" ? (
                 <button
                   type="button"
                   onClick={stopVoiceRecording}
@@ -1069,10 +1085,11 @@ export function ChatWidget({
 
               {/* Instructions */}
               <p className="text-xs text-center text-neutral-500">
+                {voiceStatus === "idle" && !voiceActive && "Click the microphone to start voice conversation"}
+                {voiceStatus === "idle" && voiceActive && "Getting ready to listen..."}
                 {voiceStatus === "listening" && "Click to stop recording and send"}
                 {voiceStatus === "processing" && "Processing your message..."}
                 {voiceStatus === "speaking" && "Click to interrupt and speak"}
-                {voiceStatus === "idle" && "Getting ready to listen..."}
               </p>
 
               {/* Stop Voice Chat Button */}
