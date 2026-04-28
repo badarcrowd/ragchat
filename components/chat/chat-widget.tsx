@@ -118,8 +118,8 @@ export function ChatWidget({
   const domain =
     initialDomain ??
     (typeof window !== "undefined" ? window.location.hostname : "localhost");
-  // For localhost development, use 'default' tenant. For production, use domain as tenant.
-  const tenantId = initialTenantId ?? (domain === "localhost" ? "default" : domain);
+  // Always use 'default' tenant for now (single-tenant mode)
+  const tenantId = initialTenantId ?? "default";
 
   const transport = useMemo(
     () =>

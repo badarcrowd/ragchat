@@ -147,8 +147,8 @@ export async function POST(request: Request) {
   }
 
   const domain = normalizeDomain(parsed.data.domain);
-  // Use 'default' tenant for localhost/development, otherwise use domain as tenant
-  const effectiveTenant = parsed.data.tenantId ?? (domain === 'localhost' ? null : domain);
+  // Always use 'default' tenant for now (single-tenant mode)
+  const effectiveTenant = parsed.data.tenantId ?? null;
   const tenantId = sanitizeTenantId(effectiveTenant);
   const sessionId = parsed.data.sessionId ?? crypto.randomUUID();
   const voiceMode = parsed.data.voiceMode ?? false; // Use faster model for voice
