@@ -91,6 +91,10 @@ export function ChatWidget({
   const [leadState, setLeadState] = useState<
     "idle" | "saving" | "saved" | "error"
   >("idle");
+  const [showMeeting, setShowMeeting] = useState(false);
+  const [meetingState, setMeetingState] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
   const [sessionId] = useState(createSessionId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMessageCountRef = useRef(0);
@@ -139,7 +143,9 @@ export function ChatWidget({
     id: sessionId,
     transport,
     onFinish: ({ message }) => {
-      if (message.metadata?.needsLead) {
+      if (message.metadata?.needsMeeting) {
+        setShowMeeting(true);
+      } else if (message.metadata?.needsLead) {
         setShowLead(true);
       }
     }
@@ -219,6 +225,34 @@ export function ChatWidget({
     }
 
     setLeadState("error");
+  }
+
+  async function submitMeeting(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setMeetingState("saving");
+
+    const response = await fetch("/api/meetings", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        sessionId,
+        tenantId,
+        name: form.get("name"),
+        email: form.get("email"),
+        date: form.get("date"),
+        time: form.get("time"),
+        notes: form.get("notes")
+      })
+    });
+
+    if (response.ok) {
+      setMeetingState("saved");
+      setTimeout(() => setShowMeeting(false), 1500);
+      return;
+    }
+
+    setMeetingState("error");
   }
 
   // Voice recording functions
@@ -721,6 +755,91 @@ export function ChatWidget({
               <div ref={messagesEndRef} />
             </div>
           </div>
+
+          {showMeeting ? (
+            <form
+              onSubmit={submitMeeting}
+              className="border-t border-neutral-200 bg-white p-4"
+            >
+              <h3 className="mb-3 text-sm font-semibold text-neutral-800">
+                📅 Book a Meeting
+              </h3>
+              <div className="grid gap-3">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <input
+                    name="name"
+                    required
+                    placeholder="Your Name *"
+                    className="rounded-xl border border-neutral-300 px-3 py-2 text-sm outline-none transition-shadow"
+                    onFocus={(e) => e.currentTarget.style.borderColor = buttonColor}
+                    onBlur={(e) => e.currentTarget.style.borderColor = ''}
+                  />
+                  <input
+                    name="email"
+                    required
+                    type="email"
+                    placeholder="Email Address *"
+                    className="rounded-xl border border-neutral-300 px-3 py-2 text-sm outline-none transition-shadow"
+                    onFocus={(e) => e.currentTarget.style.borderColor = buttonColor}
+                    onBlur={(e) => e.currentTarget.style.borderColor = ''}
+                  />
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <input
+                    name="date"
+                    required
+                    type="date"
+                    placeholder="Preferred Date"
+                    min={new Date().toISOString().split('T')[0]}
+                    className="rounded-xl border border-neutral-300 px-3 py-2 text-sm outline-none transition-shadow"
+                    onFocus={(e) => e.currentTarget.style.borderColor = buttonColor}
+                    onBlur={(e) => e.currentTarget.style.borderColor = ''}
+                  />
+                  <input
+                    name="time"
+                    required
+                    type="time"
+                    placeholder="Preferred Time"
+                    className="rounded-xl border border-neutral-300 px-3 py-2 text-sm outline-none transition-shadow"
+                    onFocus={(e) => e.currentTarget.style.borderColor = buttonColor}
+                    onBlur={(e) => e.currentTarget.style.borderColor = ''}
+                  />
+                </div>
+                <textarea
+                  name="notes"
+                  placeholder="Any specific topics you'd like to discuss? (optional)"
+                  rows={2}
+                  className="rounded-xl border border-neutral-300 px-3 py-2 text-sm outline-none transition-shadow resize-none"
+                  onFocus={(e) => e.currentTarget.style.borderColor = buttonColor}
+                  onBlur={(e) => e.currentTarget.style.borderColor = ''}
+                />
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <p className="text-xs text-neutral-500">
+                  We&apos;ll send a confirmation email shortly.
+                </p>
+                <button
+                  type="submit"
+                  disabled={meetingState === "saving" || meetingState === "saved"}
+                  className="rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all disabled:opacity-60"
+                  style={{ backgroundColor: buttonColor }}
+                  onMouseEnter={(e) => !e.currentTarget.disabled && (e.currentTarget.style.opacity = '0.9')}
+                  onMouseLeave={(e) => !e.currentTarget.disabled && (e.currentTarget.style.opacity = '1')}
+                >
+                  {meetingState === "saving"
+                    ? "Booking..."
+                    : meetingState === "saved"
+                      ? "Booked! ✓"
+                      : "Book Meeting"}
+                </button>
+              </div>
+              {meetingState === "error" ? (
+                <p className="mt-2 text-xs text-red-600">
+                  Could not book meeting. Please try again.
+                </p>
+              ) : null}
+            </form>
+          ) : null}
 
           {showLead ? (
             <form

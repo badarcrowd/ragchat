@@ -72,6 +72,10 @@ function wantsLead(text: string, messageCount: number, threshold: number) {
   );
 }
 
+function wantsMeeting(text: string): boolean {
+  return /\b(book|schedule|set up|arrange|plan)\s+(a\s+)?(meeting|call|demo|consultation|appointment|session)|talk\s+to\s+(an?\s+)?(expert|specialist|team|someone)|meet\s+with|speak\s+with|consultation|appointment/i.test(text);
+}
+
 function isCasualGreeting(text: string): boolean {
   const greetingPatterns = [
     /^(hi|hello|hey|greetings|good morning|good afternoon|good evening|howdy|hiya|yo)(!|\?|\.)?$/i,
@@ -261,6 +265,7 @@ export async function POST(request: Request) {
     userMessageCount,
     settings.leadCaptureAfterMessages
   );
+  const needsMeeting = wantsMeeting(latestText);
 
   await upsertSession({
     sessionId,
@@ -303,7 +308,7 @@ export async function POST(request: Request) {
       language: language.language,
       sources,
       responseTimeMs,
-      metadata: { noContext, needsLead }
+      metadata: { noContext, needsLead, needsMeeting }
     });
 
     return NextResponse.json({
@@ -313,7 +318,8 @@ export async function POST(request: Request) {
       detectedLanguage: language.language,
       languageName: language.languageName,
       responseTimeMs,
-      needsLead
+      needsLead,
+      needsMeeting
     });
   }
 
@@ -337,6 +343,7 @@ export async function POST(request: Request) {
         metadata: {
           noContext,
           needsLead,
+          needsMeeting,
           usage
         }
       });
@@ -352,6 +359,7 @@ export async function POST(request: Request) {
       languageName: language.languageName,
       responseTimeMs: Date.now() - startedAt,
       needsLead,
+      needsMeeting,
       noContext
     }),
     sendSources: false

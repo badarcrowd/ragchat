@@ -13,6 +13,7 @@ export type ChatMetadata = {
   languageName?: string;
   responseTimeMs?: number;
   needsLead?: boolean;
+  needsMeeting?: boolean;
   noContext?: boolean;
 };
 
