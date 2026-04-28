@@ -36,11 +36,11 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
         .maybeSingle();
       
       if (data?.metadata && typeof data.metadata === 'object') {
-        brandColor = (data.metadata as any).brand_color || "#2f6b4f";
+        brandColor = (data.metadata as { brand_color?: string }).brand_color || "#2f6b4f";
       } else {
         brandColor = "#2f6b4f";
       }
-    } catch (error) {
+    } catch {
       brandColor = "#2f6b4f";
     }
   }

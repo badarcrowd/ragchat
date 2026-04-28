@@ -59,9 +59,6 @@ function SourceLinks({ sources, brandColor }: { sources: SourceCitation[]; brand
             target="_blank"
             rel="noreferrer"
             className="inline-flex max-w-full items-center gap-1.5 rounded-md bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-700 transition-colors hover:text-white"
-            style={{
-              ['--hover-bg' as any]: brandColor
-            }}
             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = brandColor}
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = ''}
             title={source.title ?? source.url ?? "Source"}
@@ -274,7 +271,7 @@ export function ChatWidget({
                   Hi there! 👋
                 </h2>
                 <p className="mt-3 text-sm leading-relaxed text-neutral-600">
-                  Ask me anything about this site. I'll provide accurate answers with sources.
+                  Ask me anything about this site. I&apos;ll provide accurate answers with sources.
                 </p>
               </div>
             ) : null}
@@ -342,10 +339,7 @@ export function ChatWidget({
                   name="name"
                   required
                   placeholder="Name"
-                  className="rounded-xl border border-neutral-300 px-3 py-2 text-sm outline-none transition-shadow focus:ring-2"
-                  style={{
-                    ['--tw-ring-color' as any]: `${buttonColor}33`
-                  }}
+                  className="rounded-xl border border-neutral-300 px-3 py-2 text-sm outline-none transition-shadow"
                   onFocus={(e) => e.currentTarget.style.borderColor = buttonColor}
                   onBlur={(e) => e.currentTarget.style.borderColor = ''}
                 />
@@ -354,20 +348,14 @@ export function ChatWidget({
                   required
                   type="email"
                   placeholder="Email"
-                  className="rounded-xl border border-neutral-300 px-3 py-2 text-sm outline-none transition-shadow focus:ring-2"
-                  style={{
-                    ['--tw-ring-color' as any]: `${buttonColor}33`
-                  }}
+                  className="rounded-xl border border-neutral-300 px-3 py-2 text-sm outline-none transition-shadow"
                   onFocus={(e) => e.currentTarget.style.borderColor = buttonColor}
                   onBlur={(e) => e.currentTarget.style.borderColor = ''}
                 />
                 <input
                   name="phone"
                   placeholder="Phone"
-                  className="rounded-xl border border-neutral-300 px-3 py-2 text-sm outline-none transition-shadow focus:ring-2"
-                  style={{
-                    ['--tw-ring-color' as any]: `${buttonColor}33`
-                  }}
+                  className="rounded-xl border border-neutral-300 px-3 py-2 text-sm outline-none transition-shadow"
                   onFocus={(e) => e.currentTarget.style.borderColor = buttonColor}
                   onBlur={(e) => e.currentTarget.style.borderColor = ''}
                 />
@@ -414,10 +402,7 @@ export function ChatWidget({
               }}
               placeholder="Type your message..."
               rows={1}
-              className="max-h-32 min-h-11 flex-1 resize-none rounded-xl border border-neutral-300 px-4 py-3 text-sm outline-none transition-shadow focus:ring-2"
-              style={{
-                ['--tw-ring-color' as any]: `${buttonColor}33`
-              }}
+              className="max-h-32 min-h-11 flex-1 resize-none rounded-xl border border-neutral-300 px-4 py-3 text-sm outline-none transition-shadow"
               onFocus={(e) => e.currentTarget.style.borderColor = buttonColor}
               onBlur={(e) => e.currentTarget.style.borderColor = ''}
             />
@@ -444,8 +429,7 @@ export function ChatWidget({
           onClick={() => setOpen(true)}
           className="group grid h-14 w-14 place-items-center rounded-full text-white shadow-2xl transition-all duration-300 hover:scale-110 active:scale-95"
           style={{ 
-            backgroundColor: buttonColor,
-            ['--tw-shadow-color' as any]: `${buttonColor}80`
+            backgroundColor: buttonColor
           }}
           aria-label="Open chat"
           title="Open chat"

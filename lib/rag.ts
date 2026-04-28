@@ -294,15 +294,9 @@ export async function crawlUrl(url: string) {
       };
     }
 
-    // Dynamically import cheerio and handle both CJS and ESM
+    // Dynamically import cheerio
     const cheerioModule = await import("cheerio");
-    const cheerioLoad = cheerioModule.default?.load || cheerioModule.load;
-    
-    if (!cheerioLoad) {
-      throw new Error("Failed to load cheerio parser");
-    }
-
-    const $ = cheerioLoad(body);
+    const $ = cheerioModule.load(body);
     
     // Remove unwanted elements
     $("script, style, noscript, svg, nav, footer, form, iframe, img").remove();

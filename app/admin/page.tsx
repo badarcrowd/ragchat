@@ -108,7 +108,7 @@ async function loadDashboardData(): Promise<AdminDashboardData> {
         settings.data?.lead_capture_after_messages ??
         Number(process.env.LEAD_CAPTURE_AFTER_MESSAGES ?? 3),
       allowedDomains: settings.data?.allowed_domains ?? [],
-      brandColor: (settings.data?.metadata as any)?.brand_color ?? "#2f6b4f"
+      brandColor: (settings.data?.metadata as { brand_color?: string })?.brand_color ?? "#2f6b4f"
     },
     analytics
   };

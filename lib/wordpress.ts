@@ -2,21 +2,32 @@ import { normalizeText } from "./rag";
 
 export type WordPressPost = {
   id: number;
-  title: { rendered: string };
-  content: { rendered: string };
-  excerpt: { rendered: string };
-  link: string;
-  type: string;
-  slug: string;
+  title?: { rendered: string } | string;
+  name?: { rendered: string } | string;
+  content?: { rendered: string };
+  description?: { rendered: string };
+  excerpt?: { rendered: string };
+  link?: string;
+  type?: string;
+  slug?: string;
 };
 
 export type WordPressPage = {
   id: number;
-  title: { rendered: string };
-  content: { rendered: string };
-  link: string;
-  slug: string;
+  title?: { rendered: string } | string;
+  content?: { rendered: string };
+  link?: string;
+  slug?: string;
 };
+
+/**
+ * Safely extract rendered content from WordPress field
+ */
+function getRendered(field: { rendered: string } | string | undefined): string {
+  if (!field) return '';
+  if (typeof field === 'string') return field;
+  return field.rendered || '';
+}
 
 /**
  * Detect if a URL is a WordPress site
@@ -67,8 +78,8 @@ export async function discoverPostTypes(baseUrl: string): Promise<string[]> {
 
     // Filter to only public/viewable types
     const postTypes = Object.entries(types)
-      .filter(([_, type]) => type.viewable !== false)
-      .map(([_, type]) => type.rest_base || type.slug)
+      .filter(([, type]) => type.viewable !== false)
+      .map(([, type]) => type.rest_base || type.slug)
       .filter(slug => slug !== 'attachment' && slug !== 'wp_block'); // Exclude media and reusable blocks
 
     console.log('[WordPress] Discovered post types:', postTypes);
@@ -146,13 +157,13 @@ export async function fetchWordPressPage(
     }
 
     const page = pages[0];
-    const title = stripHtml(page.title.rendered);
-    const text = stripHtml(page.content.rendered);
+    const title = stripHtml(getRendered(page.title));
+    const text = stripHtml(getRendered(page.content));
 
     return {
       title: normalizeText(title),
       text: normalizeText(text),
-      url: page.link
+      url: page.link || ''
     };
   } catch (error) {
     console.error('[WordPress Page Fetch Error]', error);
@@ -188,13 +199,13 @@ export async function fetchWordPressPost(
     }
 
     const post = posts[0];
-    const title = stripHtml(post.title.rendered);
-    const text = stripHtml(post.content.rendered);
+    const title = stripHtml(getRendered(post.title));
+    const text = stripHtml(getRendered(post.content));
 
     return {
       title: normalizeText(title),
       text: normalizeText(text),
-      url: post.link
+      url: post.link || ''
     };
   } catch (error) {
     console.error('[WordPress Post Fetch Error]', error);
@@ -226,9 +237,9 @@ export async function fetchAllWordPressPages(
     const pages: WordPressPage[] = await response.json();
     
     return pages.map(page => ({
-      title: normalizeText(stripHtml(page.title.rendered)),
-      text: normalizeText(stripHtml(page.content.rendered)),
-      url: page.link
+      title: normalizeText(stripHtml(getRendered(page.title))),
+      text: normalizeText(stripHtml(getRendered(page.content))),
+      url: page.link || ''
     }));
   } catch (error) {
     console.error('[WordPress Pages Fetch Error]', error);
@@ -260,9 +271,9 @@ export async function fetchAllWordPressPosts(
     const posts: WordPressPost[] = await response.json();
     
     return posts.map(post => ({
-      title: normalizeText(stripHtml(post.title.rendered)),
-      text: normalizeText(stripHtml(post.content.rendered)),
-      url: post.link
+      title: normalizeText(stripHtml(getRendered(post.title))),
+      text: normalizeText(stripHtml(getRendered(post.content))),
+      url: post.link || ''
     }));
   } catch (error) {
     console.error('[WordPress Posts Fetch Error]', error);
@@ -295,7 +306,7 @@ export async function fetchCustomPostType(
       return [];
     }
 
-    const items: any[] = await response.json();
+    const items: WordPressPost[] = await response.json();
     
     if (!Array.isArray(items)) {
       return [];
@@ -304,8 +315,8 @@ export async function fetchCustomPostType(
     return items
       .map(item => {
         // Handle different content field structures
-        const title = item.title?.rendered || item.name?.rendered || item.title || 'Untitled';
-        const content = item.content?.rendered || item.description?.rendered || item.excerpt?.rendered || '';
+        const title = getRendered(item.title) || getRendered(item.name) || 'Untitled';
+        const content = getRendered(item.content) || getRendered(item.description) || getRendered(item.excerpt) || '';
         const url = item.link || '';
 
         return {
