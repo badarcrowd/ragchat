@@ -10,8 +10,10 @@ import {
   ExternalLink,
   Loader2,
   MessageCircle,
+  MessageSquare,
   Mic,
   MicOff,
+  Phone,
   Send,
   UserRound,
   Volume2,
@@ -83,6 +85,7 @@ export function ChatWidget({
   position = "right"
 }: ChatWidgetProps) {
   const [open, setOpen] = useState(!embed);
+  const [chatMode, setChatMode] = useState<"text" | "voice">("text");
   const [input, setInput] = useState("");
   const [showLead, setShowLead] = useState(false);
   const [leadState, setLeadState] = useState<
@@ -92,13 +95,19 @@ export function ChatWidget({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMessageCountRef = useRef(0);
 
-  // Voice state
+  // Voice state (for voice mode)
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState<"idle" | "listening" | "processing" | "speaking">("idle");
+  const [voiceActive, setVoiceActive] = useState(false); // Track if voice conversation is active
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const lastProcessedMessageId = useRef<string | null>(null); // Prevent duplicate processing
+
+  // Text mode voice state (for optional voice features in text mode)
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
 
   const domain =
     initialDomain ??
@@ -113,10 +122,11 @@ export function ChatWidget({
         body: {
           sessionId,
           domain,
-          tenantId
+          tenantId,
+          voiceMode: chatMode === "voice" // Use faster model for voice chat
         }
       }),
-    [domain, sessionId, tenantId]
+    [domain, sessionId, tenantId, chatMode]
   );
 
   const { messages, sendMessage, status, stop, error } = useChat<ChatMessage>({
@@ -290,9 +300,210 @@ export function ChatWidget({
     }
   }
 
-  // Auto-play bot responses when voice is enabled
+  // Voice Mode Functions (for dedicated voice chat)
+  function stopVoiceConversation() {
+    // Stop any ongoing recording
+    if (mediaRecorderRef.current && voiceStatus === "listening") {
+      try {
+        mediaRecorderRef.current.stop();
+        mediaRecorderRef.current.stream?.getTracks().forEach(track => track.stop());
+      } catch (error) {
+        console.error("[Stop Recording Error]", error);
+      }
+    }
+    
+    // Stop any ongoing speech
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+    }
+    
+    // Reset all voice states
+    setVoiceActive(false);
+    setVoiceStatus("idle");
+    setIsSpeaking(false);
+    setIsRecording(false);
+    mediaRecorderRef.current = null;
+  }
+
+  function interruptAI() {
+    // Stop AI speaking
+    if (audioRef.current && isSpeaking) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+      setIsSpeaking(false);
+    }
+    
+    // Immediately start listening again
+    if (chatMode === "voice") {
+      startVoiceRecording();
+    }
+  }
+
+  async function startVoiceRecording() {
+    // Only start if we're in voice chat mode
+    if (chatMode !== "voice") return;
+    
+    try {
+      setVoiceStatus("listening");
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        stream.getTracks().forEach(track => track.stop());
+        
+        // Only transcribe if there's actual audio
+        if (audioBlob.size > 1000) { // At least 1KB of audio
+          await transcribeAndSendVoice(audioBlob);
+        } else {
+          // No audio detected, resume listening
+          if (chatMode === "voice") {
+            setTimeout(() => {
+              startVoiceRecording();
+            }, 500);
+          } else {
+            setVoiceStatus("idle");
+          }
+        }
+      };
+
+      mediaRecorder.start();
+      
+      // Auto-stop after 30 seconds maximum
+      setTimeout(() => {
+        if (mediaRecorder.state === "recording") {
+          stopVoiceRecording();
+        }
+      }, 30000);
+      
+    } catch (error) {
+      console.error("[Voice Recording Error]", error);
+      setVoiceStatus("idle");
+      if (error instanceof Error && error.name === "NotAllowedError") {
+        alert("Microphone access denied. Please enable microphone permissions to use voice chat.");
+        setVoiceActive(false);
+      }
+    }
+  }
+
+  function stopVoiceRecording() {
+    if (mediaRecorderRef.current && (voiceStatus === "listening" || mediaRecorderRef.current.state === "recording")) {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (error) {
+        console.error("[Stop Voice Recording Error]", error);
+        setVoiceStatus("idle");
+      }
+    }
+  }
+
+  async function transcribeAndSendVoice(audioBlob: Blob) {
+    setVoiceStatus("processing");
+    try {
+      // Transcribe audio
+      const formData = new FormData();
+      formData.append("audio", audioBlob);
+
+      const response = await fetch("/api/voice/transcribe", {
+        method: "POST",
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error("Transcription failed");
+      }
+
+      const data = await response.json();
+      const text = data.text;
+
+      // Automatically send the message
+      await sendMessage({ text });
+
+      // Status will change to "speaking" when response arrives
+    } catch (error) {
+      console.error("[Voice Transcription Error]", error);
+      setVoiceStatus("idle");
+    }
+  }
+
+  async function speakResponse(text: string) {
+    setVoiceStatus("speaking");
+    setIsSpeaking(true);
+    
+    try {
+      const response = await fetch("/api/voice/speak", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text })
+      });
+
+      if (!response.ok) {
+        throw new Error("Text-to-speech failed");
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      
+      if (audioRef.current) {
+        audioRef.current.src = audioUrl;
+        audioRef.current.onended = () => {
+          setIsSpeaking(false);
+          // Auto-resume listening after AI finishes speaking (if voice mode is still active)
+          if (chatMode === "voice") {
+            setTimeout(() => {
+              startVoiceRecording();
+            }, 500); // Small delay before resuming
+          } else {
+            setVoiceStatus("idle");
+          }
+        };
+        await audioRef.current.play();
+      }
+    } catch (error) {
+      console.error("[Voice Speech Error]", error);
+      setVoiceStatus("idle");
+      setIsSpeaking(false);
+      // Resume listening even on error
+      if (chatMode === "voice") {
+        setTimeout(() => {
+          startVoiceRecording();
+        }, 500);
+      }
+    }
+  }
+
+  // Auto-speak responses in voice mode
   useEffect(() => {
-    if (!voiceEnabled || isBusy) return;
+    if (chatMode !== "voice" || isBusy || isSpeaking || !voiceActive) return;
+
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage && lastMessage.role === "assistant") {
+      // Prevent processing the same message twice
+      if (lastProcessedMessageId.current === lastMessage.id) {
+        return;
+      }
+      
+      const text = readMessageText(lastMessage);
+      if (text) {
+        lastProcessedMessageId.current = lastMessage.id;
+        speakResponse(text);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, chatMode, isBusy, isSpeaking, voiceActive]);
+
+  // Auto-play bot responses when voice is enabled (text mode)
+  useEffect(() => {
+    if (!voiceEnabled || isBusy || chatMode !== "text") return;
 
     const lastMessage = messages[messages.length - 1];
     if (lastMessage && lastMessage.role === "assistant") {
@@ -302,7 +513,31 @@ export function ChatWidget({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, voiceEnabled, isBusy]);
+  }, [messages, voiceEnabled, isBusy, chatMode]);
+
+  // Auto-start/stop voice mode when switching tabs
+  useEffect(() => {
+    if (chatMode === "voice") {
+      // Auto-start voice conversation when entering voice mode
+      setVoiceActive(true);
+      lastProcessedMessageId.current = null; // Reset message tracking
+      setTimeout(() => {
+        startVoiceRecording();
+      }, 300); // Small delay to let UI settle
+    } else {
+      // Cleanup when leaving voice mode
+      stopVoiceConversation();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatMode]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopVoiceConversation();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const shellClass = embed
     ? `fixed bottom-0 ${position === "left" ? "left-0" : "right-0"} z-[9999] flex items-end bg-transparent p-4`
@@ -368,6 +603,39 @@ export function ChatWidget({
             </div>
           </header>
 
+          {/* Tab Switcher */}
+          <div className="flex border-b border-neutral-200 bg-white">
+            <button
+              type="button"
+              onClick={() => setChatMode("text")}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+                chatMode === "text"
+                  ? "border-b-2 text-neutral-900"
+                  : "text-neutral-500 hover:text-neutral-700"
+              }`}
+              style={chatMode === "text" ? { borderBottomColor: buttonColor, color: buttonColor } : {}}
+            >
+              <MessageSquare className="h-4 w-4" />
+              Text Chat
+            </button>
+            <button
+              type="button"
+              onClick={() => setChatMode("voice")}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+                chatMode === "voice"
+                  ? "border-b-2 text-neutral-900"
+                  : "text-neutral-500 hover:text-neutral-700"
+              }`}
+              style={chatMode === "voice" ? { borderBottomColor: buttonColor, color: buttonColor } : {}}
+            >
+              <Phone className="h-4 w-4" />
+              Voice Chat
+            </button>
+          </div>
+
+          {/* Text Chat Mode */}
+          {chatMode === "text" ? (
+          <>
           <div className="scrollbar-thin flex-1 overflow-y-auto bg-gradient-to-b from-neutral-50 to-white p-5">
             {messages.length === 0 ? (
               <div className="mx-auto mt-20 max-w-sm text-center">
@@ -564,6 +832,130 @@ export function ChatWidget({
               {error.message}
             </p>
           ) : null}
+          </>
+          ) : (
+          /* Voice Chat Mode */
+          <>
+          <div className="flex-1 overflow-y-auto bg-gradient-to-b from-neutral-50 to-white p-5">
+            {/* Voice Chat Messages */}
+            <div className="space-y-4">
+              {messages.map((message) => {
+                const text = readMessageText(message);
+                const isUser = message.role === "user";
+                return (
+                  <article
+                    key={message.id}
+                    className={`flex gap-3 ${isUser ? "justify-end" : ""}`}
+                  >
+                    {!isUser ? (
+                      <span className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full text-white shadow-sm" style={{ backgroundColor: buttonColor }}>
+                        <Bot className="h-4 w-4" />
+                      </span>
+                    ) : null}
+                    <div
+                      className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
+                        isUser
+                          ? "text-white"
+                          : "border border-neutral-200 bg-white text-neutral-800"
+                      }`}
+                      style={isUser ? { backgroundImage: `linear-gradient(to bottom right, ${buttonColor}, ${buttonColor}f0)` } : {}}
+                    >
+                      <p className="whitespace-pre-wrap">{text}</p>
+                    </div>
+                    {isUser ? (
+                      <span className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-coral to-coral/80 text-white shadow-sm">
+                        <UserRound className="h-4 w-4" />
+                      </span>
+                    ) : null}
+                  </article>
+                );
+              })}
+              {voiceStatus === "processing" || isBusy ? (
+                <div className="flex items-center gap-2 text-sm text-neutral-500">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Processing...</span>
+                </div>
+              ) : null}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Voice Status Indicator */}
+            {messages.length === 0 ? (
+              <div className="mx-auto mt-20 max-w-sm text-center">
+                <div className="mx-auto mb-6 grid h-20 w-20 place-items-center rounded-full" style={{ backgroundColor: `${buttonColor}20` }}>
+                  <Phone className="h-10 w-10" style={{ color: buttonColor }} />
+                </div>
+                <h2 className="text-xl font-semibold text-neutral-800">
+                  Voice Chat Active
+                </h2>
+                <p className="mt-3 text-sm leading-relaxed text-neutral-600">
+                  Speak naturally - I&apos;m listening! Click the microphone to stop recording, or interrupt me anytime while I&apos;m speaking.
+                </p>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Voice Controls */}
+          <div className="border-t border-neutral-200 bg-white p-6">
+            <div className="flex flex-col items-center gap-4">
+              {/* Status Text */}
+              <p className="text-sm font-medium text-neutral-600">
+                {voiceStatus === "idle" && "Initializing..."}
+                {voiceStatus === "listening" && "🎤 Listening to you..."}
+                {voiceStatus === "processing" && "⚡ Processing your message..."}
+                {voiceStatus === "speaking" && "🔊 AI is speaking..."}
+              </p>
+
+              {/* Main Action Button */}
+              {voiceStatus === "listening" ? (
+                <button
+                  type="button"
+                  onClick={stopVoiceRecording}
+                  className="grid h-24 w-24 place-items-center rounded-full bg-red-500 text-white shadow-2xl transition-all hover:bg-red-600 active:scale-95 animate-pulse"
+                  aria-label="Stop listening"
+                >
+                  <MicOff className="h-10 w-10" />
+                </button>
+              ) : voiceStatus === "speaking" ? (
+                <button
+                  type="button"
+                  onClick={interruptAI}
+                  className="grid h-24 w-24 place-items-center rounded-full text-white shadow-2xl transition-all hover:scale-105 active:scale-95"
+                  style={{ backgroundColor: buttonColor }}
+                  aria-label="Interrupt and speak"
+                >
+                  <Mic className="h-10 w-10" />
+                </button>
+              ) : (
+                <div className="grid h-24 w-24 place-items-center rounded-full text-white shadow-2xl opacity-60"
+                  style={{ backgroundColor: buttonColor }}>
+                  <Loader2 className="h-10 w-10 animate-spin" />
+                </div>
+              )}
+
+              {/* Instructions */}
+              <p className="text-xs text-center text-neutral-500">
+                {voiceStatus === "listening" && "Click to stop recording and send"}
+                {voiceStatus === "processing" && "AI is thinking..."}
+                {voiceStatus === "speaking" && "Click to interrupt and speak"}
+                {voiceStatus === "idle" && "Getting ready to listen..."}
+              </p>
+
+              {/* Stop Voice Chat Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  stopVoiceConversation();
+                  setChatMode("text");
+                }}
+                className="mt-2 rounded-lg px-4 py-2 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
+              >
+                ✕ Stop Voice Chat
+              </button>
+            </div>
+          </div>
+          </>
+          )}
         </section>
       ) : (
         <button

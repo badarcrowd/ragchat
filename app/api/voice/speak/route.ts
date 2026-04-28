@@ -17,11 +17,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Use tts-1 for fastest generation (lower latency)
     const mp3 = await openaiClient.audio.speech.create({
       model: "tts-1",
       voice: "alloy",
       input: text,
-      speed: 1.0
+      speed: 1.0, // Normal speed - optimize generation time not playback speed
+      response_format: "mp3"
     });
 
     const buffer = Buffer.from(await mp3.arrayBuffer());
@@ -29,7 +31,8 @@ export async function POST(req: NextRequest) {
     return new NextResponse(buffer, {
       headers: {
         "Content-Type": "audio/mpeg",
-        "Content-Length": buffer.length.toString()
+        "Content-Length": buffer.length.toString(),
+        "Cache-Control": "no-cache"
       }
     });
   } catch (error) {

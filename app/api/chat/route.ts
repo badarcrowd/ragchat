@@ -31,7 +31,8 @@ const chatRequestSchema = z.object({
   sessionId: z.string().uuid().optional(),
   domain: z.string().max(253).optional().nullable(),
   tenantId: z.string().max(160).optional().nullable(),
-  stream: z.boolean().optional()
+  stream: z.boolean().optional(),
+  voiceMode: z.boolean().optional() // Flag for faster voice responses
 });
 
 function textFromMessage(message: ChatMessage) {
@@ -150,6 +151,7 @@ export async function POST(request: Request) {
   const effectiveTenant = parsed.data.tenantId ?? (domain === 'localhost' ? null : domain);
   const tenantId = sanitizeTenantId(effectiveTenant);
   const sessionId = parsed.data.sessionId ?? crypto.randomUUID();
+  const voiceMode = parsed.data.voiceMode ?? false; // Use faster model for voice
   const settings = await loadSettings(tenantId);
 
   // Guardrails: Check input for safety
@@ -186,9 +188,10 @@ export async function POST(request: Request) {
   const skipRetrieval = isCasualGreeting(latestText);
   
   // Configuration
-  const initialRetrievalCount = Number(process.env.RAG_INITIAL_RETRIEVAL ?? 15);
-  const rerankTopK = Number(process.env.RAG_RERANK_TOP_K ?? 10);
-  const finalTopK = Number(process.env.RAG_FINAL_TOP_K ?? 5);
+  // In voice mode, use faster/smaller retrieval for quicker responses
+  const initialRetrievalCount = voiceMode ? 8 : Number(process.env.RAG_INITIAL_RETRIEVAL ?? 15);
+  const rerankTopK = voiceMode ? 5 : Number(process.env.RAG_RERANK_TOP_K ?? 10);
+  const finalTopK = voiceMode ? 3 : Number(process.env.RAG_FINAL_TOP_K ?? 5);
   const enableReranking = process.env.RAG_ENABLE_RERANKING !== 'false';
   const enableDiversity = process.env.RAG_ENABLE_DIVERSITY !== 'false';
   
@@ -282,10 +285,10 @@ export async function POST(request: Request) {
 
   if (parsed.data.stream === false) {
     const result = await generateText({
-      model: getChatModel(),
+      model: getChatModel(voiceMode), // Use faster model for voice
       system,
       messages: modelMessages,
-      maxOutputTokens: 900
+      maxOutputTokens: voiceMode ? 600 : 900 // Shorter responses in voice mode
     });
 
     // Sanitize output to remove potential PII
@@ -315,10 +318,10 @@ export async function POST(request: Request) {
   }
 
   const result = streamText({
-    model: getChatModel(),
+    model: getChatModel(voiceMode), // Use faster model for voice
     system,
     messages: modelMessages,
-    maxOutputTokens: 900,
+    maxOutputTokens: voiceMode ? 600 : 900, // Shorter responses in voice mode
     onFinish: async ({ text, usage }) => {
       // Sanitize output before storing
       const sanitizedText = sanitizeOutput(text);
