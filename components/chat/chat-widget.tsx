@@ -10,8 +10,11 @@ import {
   ExternalLink,
   Loader2,
   MessageCircle,
+  Mic,
+  MicOff,
   Send,
   UserRound,
+  Volume2,
   X
 } from "lucide-react";
 import type { ChatMessage, SourceCitation } from "@/lib/types";
@@ -88,6 +91,14 @@ export function ChatWidget({
   const [sessionId] = useState(createSessionId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMessageCountRef = useRef(0);
+
+  // Voice state
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const domain =
     initialDomain ??
@@ -193,6 +204,105 @@ export function ChatWidget({
 
     setLeadState("error");
   }
+
+  // Voice recording functions
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        stream.getTracks().forEach(track => track.stop());
+        await transcribeAudio(audioBlob);
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (error) {
+      console.error("[Voice Recording Error]", error);
+      alert("Microphone access denied. Please enable microphone permissions.");
+    }
+  }
+
+  function stopRecording() {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  }
+
+  async function transcribeAudio(audioBlob: Blob) {
+    setIsTranscribing(true);
+    try {
+      const formData = new FormData();
+      formData.append("audio", audioBlob);
+
+      const response = await fetch("/api/voice/transcribe", {
+        method: "POST",
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error("Transcription failed");
+      }
+
+      const data = await response.json();
+      setInput(data.text);
+      setIsTranscribing(false);
+    } catch (error) {
+      console.error("[Voice Transcription Error]", error);
+      setIsTranscribing(false);
+    }
+  }
+
+  async function speakText(text: string) {
+    if (!voiceEnabled) return;
+    
+    try {
+      const response = await fetch("/api/voice/speak", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text })
+      });
+
+      if (!response.ok) {
+        throw new Error("Text-to-speech failed");
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      
+      if (audioRef.current) {
+        audioRef.current.src = audioUrl;
+        audioRef.current.play();
+      }
+    } catch (error) {
+      console.error("[Voice Speech Error]", error);
+    }
+  }
+
+  // Auto-play bot responses when voice is enabled
+  useEffect(() => {
+    if (!voiceEnabled || isBusy) return;
+
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage && lastMessage.role === "assistant") {
+      const text = readMessageText(lastMessage);
+      if (text) {
+        speakText(text);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, voiceEnabled, isBusy]);
 
   const shellClass = embed
     ? `fixed bottom-0 ${position === "left" ? "left-0" : "right-0"} z-[9999] flex items-end bg-transparent p-4`
@@ -391,6 +501,20 @@ export function ChatWidget({
             onSubmit={submitMessage}
             className="flex items-end gap-3 border-t border-neutral-200 bg-white p-4"
           >
+            <button
+              type="button"
+              onClick={() => setVoiceEnabled(!voiceEnabled)}
+              className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl transition-all ${
+                voiceEnabled
+                  ? "text-white shadow-md hover:shadow-lg"
+                  : "border-2 text-neutral-400 hover:text-neutral-600"
+              }`}
+              style={voiceEnabled ? { backgroundColor: buttonColor, borderColor: buttonColor } : { borderColor: "#d4d4d8" }}
+              aria-label={voiceEnabled ? "Disable voice" : "Enable voice"}
+              title={voiceEnabled ? "Voice enabled" : "Voice disabled"}
+            >
+              {voiceEnabled ? <Volume2 className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+            </button>
             <textarea
               value={input}
               onChange={(event) => setInput(event.target.value)}
@@ -400,12 +524,30 @@ export function ChatWidget({
                   event.currentTarget.form?.requestSubmit();
                 }
               }}
-              placeholder="Type your message..."
+              placeholder={isTranscribing ? "Transcribing..." : "Type or speak your message..."}
               rows={1}
-              className="max-h-32 min-h-11 flex-1 resize-none rounded-xl border border-neutral-300 px-4 py-3 text-sm outline-none transition-shadow"
+              disabled={isTranscribing || isRecording}
+              className="max-h-32 min-h-11 flex-1 resize-none rounded-xl border border-neutral-300 px-4 py-3 text-sm outline-none transition-shadow disabled:bg-neutral-50"
               onFocus={(e) => e.currentTarget.style.borderColor = buttonColor}
               onBlur={(e) => e.currentTarget.style.borderColor = ''}
             />
+            <button
+              type="button"
+              onClick={isRecording ? stopRecording : startRecording}
+              disabled={isTranscribing}
+              className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl transition-all ${
+                isRecording
+                  ? "animate-pulse bg-red-500 text-white shadow-lg"
+                  : "border-2 text-neutral-600 hover:text-white hover:shadow-md disabled:opacity-50"
+              }`}
+              style={!isRecording ? { borderColor: buttonColor } : {}}
+              onMouseEnter={(e) => !isRecording && !isTranscribing && (e.currentTarget.style.backgroundColor = buttonColor)}
+              onMouseLeave={(e) => !isRecording && (e.currentTarget.style.backgroundColor = '')}
+              aria-label={isRecording ? "Stop recording" : "Start recording"}
+              title={isRecording ? "Stop recording" : "Start voice message"}
+            >
+              {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+            </button>
             <button
               type="submit"
               disabled={!input.trim() || isBusy}
@@ -437,6 +579,7 @@ export function ChatWidget({
           <MessageCircle className="h-6 w-6 transition-transform group-hover:scale-110" />
         </button>
       )}
+      <audio ref={audioRef} className="hidden" />
     </div>
   );
 }

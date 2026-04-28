@@ -25,3 +25,7 @@ export function smallModelName() {
 export function embeddingModelName() {
   return process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small";
 }
+
+export function openaiApiKey() {
+  return requireEnv("OPENAI_API_KEY");
+}
