@@ -108,6 +108,12 @@ export function ChatWidget({
 
   // Text mode voice state (for optional voice features in text mode)
   const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const chatModeRef = useRef<"text" | "voice">("text");
+
+  // Update ref when chatMode changes
+  useEffect(() => {
+    chatModeRef.current = chatMode;
+  }, [chatMode]);
 
   const domain =
     initialDomain ??
@@ -119,14 +125,14 @@ export function ChatWidget({
     () =>
       new DefaultChatTransport<ChatMessage>({
         api: "/api/chat",
-        body: {
+        body: () => ({
           sessionId,
           domain,
           tenantId,
-          voiceMode: chatMode === "voice" // Use faster model for voice chat
-        }
+          voiceMode: chatModeRef.current === "voice" // Only use faster model for voice
+        })
       }),
-    [domain, sessionId, tenantId, chatMode]
+    [domain, sessionId, tenantId]
   );
 
   const { messages, sendMessage, status, stop, error } = useChat<ChatMessage>({
@@ -698,9 +704,20 @@ export function ChatWidget({
                 );
               })}
               {isBusy ? (
-                <div className="flex items-center gap-2 text-sm text-neutral-500">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Thinking...</span>
+                <div className="flex items-start gap-3 px-4 py-3">
+                  <span className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full text-white shadow-sm" style={{ backgroundColor: buttonColor }}>
+                    <Bot className="h-4 w-4" />
+                  </span>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1 rounded-2xl bg-neutral-100 px-4 py-3">
+                        <span className="h-2 w-2 rounded-full bg-neutral-400 animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                        <span className="h-2 w-2 rounded-full bg-neutral-400 animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                        <span className="h-2 w-2 rounded-full bg-neutral-400 animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                      </div>
+                    </div>
+                    <span className="text-xs text-neutral-400">Writing...</span>
+                  </div>
                 </div>
               ) : null}
               <div ref={messagesEndRef} />
@@ -936,7 +953,7 @@ export function ChatWidget({
               {/* Instructions */}
               <p className="text-xs text-center text-neutral-500">
                 {voiceStatus === "listening" && "Click to stop recording and send"}
-                {voiceStatus === "processing" && "AI is thinking..."}
+                {voiceStatus === "processing" && "Processing your message..."}
                 {voiceStatus === "speaking" && "Click to interrupt and speak"}
                 {voiceStatus === "idle" && "Getting ready to listen..."}
               </p>

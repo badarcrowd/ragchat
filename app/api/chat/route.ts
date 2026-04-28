@@ -189,9 +189,9 @@ export async function POST(request: Request) {
   
   // Configuration
   // In voice mode, use faster/smaller retrieval for quicker responses
-  const initialRetrievalCount = voiceMode ? 8 : Number(process.env.RAG_INITIAL_RETRIEVAL ?? 15);
-  const rerankTopK = voiceMode ? 5 : Number(process.env.RAG_RERANK_TOP_K ?? 10);
-  const finalTopK = voiceMode ? 3 : Number(process.env.RAG_FINAL_TOP_K ?? 5);
+  const initialRetrievalCount = voiceMode ? 10 : Number(process.env.RAG_INITIAL_RETRIEVAL ?? 15);
+  const rerankTopK = voiceMode ? 8 : Number(process.env.RAG_RERANK_TOP_K ?? 10);
+  const finalTopK = voiceMode ? 5 : Number(process.env.RAG_FINAL_TOP_K ?? 5);
   const enableReranking = process.env.RAG_ENABLE_RERANKING !== 'false';
   const enableDiversity = process.env.RAG_ENABLE_DIVERSITY !== 'false';
   
@@ -285,10 +285,10 @@ export async function POST(request: Request) {
 
   if (parsed.data.stream === false) {
     const result = await generateText({
-      model: getChatModel(voiceMode), // Use faster model for voice
+      model: getChatModel(voiceMode), // Use gpt-5.4-mini only for voice, gpt-5.5 for text
       system,
       messages: modelMessages,
-      maxOutputTokens: voiceMode ? 600 : 900 // Shorter responses in voice mode
+      maxOutputTokens: voiceMode ? 700 : 900 // Slightly shorter for voice
     });
 
     // Sanitize output to remove potential PII
@@ -318,10 +318,10 @@ export async function POST(request: Request) {
   }
 
   const result = streamText({
-    model: getChatModel(voiceMode), // Use faster model for voice
+    model: getChatModel(voiceMode), // Use gpt-5.4-mini only for voice, gpt-5.5 for text
     system,
     messages: modelMessages,
-    maxOutputTokens: voiceMode ? 600 : 900, // Shorter responses in voice mode
+    maxOutputTokens: voiceMode ? 700 : 900, // Slightly shorter for voice
     onFinish: async ({ text, usage }) => {
       // Sanitize output before storing
       const sanitizedText = sanitizeOutput(text);
