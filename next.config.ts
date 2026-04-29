@@ -11,29 +11,29 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: "/widget.js",
+        source: "/:path*",
         headers: [
-          {
-            key: "Content-Type",
-            value: "text/javascript; charset=UTF-8",
-          },
-          {
-            key: "X-Content-Type-Options",
-            value: "nosniff",
-          },
           {
             key: "Access-Control-Allow-Origin",
             value: "*",
           },
           {
             key: "Access-Control-Allow-Methods",
-            value: "GET, OPTIONS",
+            value: "GET, POST, PUT, DELETE, OPTIONS",
           },
           {
-            key: "Cache-Control",
-            value: "public, max-age=31536000, immutable",
+            key: "Access-Control-Allow-Headers",
+            value: "Content-Type, Authorization",
           },
         ],
+      },
+    ];
+  },
+  async rewrites() {
+    return [
+      {
+        source: "/widget.js",
+        destination: "/api/widget",
       },
     ];
   },
