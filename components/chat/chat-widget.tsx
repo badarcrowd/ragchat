@@ -580,7 +580,7 @@ export function ChatWidget({
   }, []);
 
   const shellClass = embed
-    ? `fixed bottom-0 ${position === "left" ? "left-0" : "right-0"} z-[9999] flex items-end bg-transparent`
+    ? `fixed bottom-0 ${position === "left" ? "left-0" : "right-0"} z-[9999] flex items-end bg-transparent p-4`
     : "mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl items-center justify-center";
 
   return (
@@ -594,7 +594,7 @@ export function ChatWidget({
         <section
           className={
             embed
-              ? "flex h-screen w-screen flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-2xl transition-all duration-300 ease-out animate-in slide-in-from-bottom-8 md:h-[700px] md:w-[400px]"
+              ? "flex h-[min(700px,calc(100vh-32px))] w-[min(400px,calc(100vw-32px))] flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-2xl transition-all duration-300 ease-out animate-in slide-in-from-bottom-8"
               : "flex h-[760px] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-2xl"
           }
         >

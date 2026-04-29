@@ -26,36 +26,33 @@
 
   iframe.src = baseUrl + "/chat?" + params.toString();
   iframe.title = "AI chat assistant";
-  iframe.allow = "clipboard-write; microphone";
+  iframe.allow = "clipboard-write";
   iframe.style.position = "fixed";
-  iframe.style.bottom = "20px";
-  iframe.style[position] = "20px";
+  iframe.style.bottom = "16px";
+  iframe.style[position] = "16px";
   iframe.style.width = "96px";
   iframe.style.height = "96px";
   iframe.style.border = "0";
   iframe.style.zIndex = String(config.zIndex || 2147483000);
   iframe.style.background = "transparent";
   iframe.style.colorScheme = "light";
-  iframe.style.overflow = "hidden";
 
   function resize(open) {
     var isMobile = window.matchMedia("(max-width: 520px)").matches;
     if (open && isMobile) {
       iframe.style.width = "100vw";
-      iframe.style.height = "100vh";
+      iframe.style.height = "100dvh";
       iframe.style.bottom = "0";
       iframe.style[position] = "0";
-      iframe.style.borderRadius = "0";
       return;
     }
 
-    iframe.style.borderRadius = "16px";
-    iframe.style.bottom = "20px";
-    iframe.style[position] = "20px";
+    iframe.style.bottom = "16px";
+    iframe.style[position] = "16px";
     iframe.style.width = open ? "420px" : "96px";
-    iframe.style.height = open ? "700px" : "96px";
-    iframe.style.maxWidth = "calc(100vw - 40px)";
-    iframe.style.maxHeight = "calc(100vh - 40px)";
+    iframe.style.height = open ? "680px" : "96px";
+    iframe.style.maxWidth = "100vw";
+    iframe.style.maxHeight = "100dvh";
   }
 
   window.addEventListener("message", function (event) {

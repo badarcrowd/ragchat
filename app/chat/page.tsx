@@ -53,15 +53,6 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
           : "min-h-screen bg-wheat px-4 py-8 text-ink"
       }
     >
-      {embed && (
-        <style>{`
-          body {
-            background: transparent !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-        `}</style>
-      )}
       <ChatWidget
         embed={embed}
         initialDomain={domain}
