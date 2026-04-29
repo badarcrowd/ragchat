@@ -4,7 +4,7 @@
 
 :root {
   color-scheme: light;
-  background: #f7f3eb;
+  background: transparent !important;
   color: #161616;
 }
 
@@ -19,9 +19,7 @@ body {
 
 body {
   margin: 0;
-  background:
-    linear-gradient(180deg, rgba(245, 239, 229, 0.92), rgba(255, 255, 255, 0.92)),
-    #f5efe5;
+  background: transparent !important;
   color: #161616;
 }
 
