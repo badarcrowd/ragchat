@@ -1,0 +1,21 @@
+{
+  "headers": [
+    {
+      "source": "/widget.js",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/javascript; charset=UTF-8"
+        },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
+  ]
+}
