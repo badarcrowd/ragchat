@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdmin } from "@/lib/supabase";
-import { sanitizeTenantId } from "@/lib/rag";
 import { rateLimit } from "@/lib/security/rate-limit";
-
-export const runtime = "nodejs";
+import { sanitizeTenantId } from "@/lib/rag";
 
 export async function GET(request: Request) {
   const limited = await rateLimit(request, "admin", 60, 60);
@@ -12,33 +10,44 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const tenantId = sanitizeTenantId(searchParams.get("tenantId") ?? "default");
+  const tenantId = sanitizeTenantId(searchParams.get("tenantId") || "default");
   const page = parseInt(searchParams.get("page") || "1");
-  const pageSize = parseInt(searchParams.get("pageSize") || "10");
-
+  const pageSize = parseInt(searchParams.get("pageSize") || "50");
+  
   const supabase = createSupabaseAdmin();
   
   const offset = (page - 1) * pageSize;
 
-  const [{ data: documents, error }, { count }] = await Promise.all([
+  const [{ data: messages, error }, { count }] = await Promise.all([
     supabase
-      .from("documents")
-      .select("id, tenant_id, title, source_url, type, status, chunk_count, created_at, indexed_at")
+      .from("messages")
+      .select(`
+        id,
+        role,
+        content,
+        response_time_ms,
+        created_at,
+        session_id,
+        sources
+      `)
       .eq("tenant_id", tenantId)
       .order("created_at", { ascending: false })
       .range(offset, offset + pageSize - 1),
     supabase
-      .from("documents")
+      .from("messages")
       .select("*", { count: "exact", head: true })
       .eq("tenant_id", tenantId),
   ]);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch conversations" },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({
-    documents,
+    messages,
     pagination: {
       page,
       pageSize,

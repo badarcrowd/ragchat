@@ -8,7 +8,11 @@ const schema = z.object({
   systemPrompt: z.string().min(20).max(6000),
   leadCaptureAfterMessages: z.number().int().min(1).max(20),
   allowedDomains: z.array(z.string().min(1).max(253)).default([]),
-  brandColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional()
+  brandColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  voiceEnabled: z.boolean().optional(),
+  widgetPosition: z.enum(["left", "right"]).optional(),
+  widgetTitle: z.string().min(1).max(100).optional(),
+  widgetWelcomeMessage: z.string().max(500).optional()
 });
 
 export async function POST(request: Request) {
@@ -20,6 +24,13 @@ export async function POST(request: Request) {
     );
   }
 
+  const metadata: Record<string, unknown> = {};
+  if (parsed.data.brandColor) metadata.brand_color = parsed.data.brandColor;
+  if (parsed.data.voiceEnabled !== undefined) metadata.voice_enabled = parsed.data.voiceEnabled;
+  if (parsed.data.widgetPosition) metadata.widget_position = parsed.data.widgetPosition;
+  if (parsed.data.widgetTitle) metadata.widget_title = parsed.data.widgetTitle;
+  if (parsed.data.widgetWelcomeMessage) metadata.widget_welcome_message = parsed.data.widgetWelcomeMessage;
+
   const supabase = createSupabaseAdmin();
   const { error } = await supabase.from("settings").upsert(
     {
@@ -29,7 +40,7 @@ export async function POST(request: Request) {
       allowed_domains: parsed.data.allowedDomains.map((domain) =>
         domain.toLowerCase()
       ),
-      metadata: parsed.data.brandColor ? { brand_color: parsed.data.brandColor } : {},
+      metadata,
       updated_at: new Date().toISOString()
     },
     { onConflict: "tenant_id" }
