@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { AdminDashboardData, DocumentRow } from "@/lib/types";
+import { SignOutButton } from "@/components/auth/signout-button";
 
 type AdminDashboardProps = {
   data: AdminDashboardData;
@@ -147,11 +148,14 @@ export function AdminDashboard({ data }: AdminDashboardProps) {
             </p>
             <h1 className="mt-2 text-3xl font-semibold">RAG chatbot console</h1>
           </div>
-          {status ? (
-            <p className="rounded-md border border-line bg-white px-3 py-2 text-sm text-neutral-700">
-              {status}
-            </p>
-          ) : null}
+          <div className="flex items-center gap-3">
+            {status ? (
+              <p className="rounded-md border border-line bg-white px-3 py-2 text-sm text-neutral-700">
+                {status}
+              </p>
+            ) : null}
+            <SignOutButton />
+          </div>
         </header>
 
         <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
