@@ -5,7 +5,7 @@ import { rateLimit } from "@/lib/security/rate-limit";
 import { createSupabaseAdmin } from "@/lib/supabase";
 
 const meetingRequestSchema = z.object({
-  sessionId: z.string().uuid().optional().nullable(),
+  sessionId: z.string().optional().nullable(),
   tenantId: z.string().optional().nullable(),
   name: z.string().min(1).max(100),
   email: z.string().email(),

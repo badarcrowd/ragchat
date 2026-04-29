@@ -28,7 +28,7 @@ export const runtime = "nodejs";
 
 const chatRequestSchema = z.object({
   messages: z.array(z.any()).min(1),
-  sessionId: z.string().uuid().optional(),
+  sessionId: z.string().optional(),
   domain: z.string().max(253).optional().nullable(),
   tenantId: z.string().max(160).optional().nullable(),
   stream: z.boolean().optional(),

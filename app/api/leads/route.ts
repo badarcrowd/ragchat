@@ -6,7 +6,7 @@ import { rateLimit } from "@/lib/security/rate-limit";
 import { createSupabaseAdmin } from "@/lib/supabase";
 
 const leadRequestSchema = hubspotLeadSchema.extend({
-  sessionId: z.string().uuid().optional().nullable()
+  sessionId: z.string().optional().nullable()
 });
 
 export async function POST(request: Request) {
