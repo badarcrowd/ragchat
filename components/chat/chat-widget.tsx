@@ -20,6 +20,10 @@ import {
   X
 } from "lucide-react";
 import type { ChatMessage, SourceCitation } from "@/lib/types";
+import {
+  getVoiceRecorderOptions,
+  voiceCaptureConstraints,
+} from "@/lib/voice/browser";
 
 type ChatWidgetProps = {
   embed?: boolean;
@@ -82,7 +86,7 @@ export function ChatWidget({
   initialDomain,
   initialTenantId,
   brandColor,
-  position = "right"
+  position = "left"
 }: ChatWidgetProps) {
   const [open, setOpen] = useState(!embed);
   const [chatMode, setChatMode] = useState<"text" | "voice">("text");
@@ -155,6 +159,15 @@ export function ChatWidget({
   const buttonColor = brandColor && /^#[0-9a-f]{6}$/i.test(brandColor)
     ? brandColor
     : "#2f6b4f";
+
+  function clearAudioSource() {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audio.src.startsWith("blob:")) {
+      URL.revokeObjectURL(audio.src);
+    }
+    audio.removeAttribute("src");
+  }
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -258,8 +271,10 @@ export function ChatWidget({
   // Voice recording functions
   async function startRecording() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      const stream = await navigator.mediaDevices.getUserMedia(
+        voiceCaptureConstraints
+      );
+      const mediaRecorder = new MediaRecorder(stream, getVoiceRecorderOptions());
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -275,7 +290,7 @@ export function ChatWidget({
         await transcribeAudio(audioBlob);
       };
 
-      mediaRecorder.start();
+      mediaRecorder.start(250);
       setIsRecording(true);
     } catch (error) {
       console.error("[Voice Recording Error]", error);
@@ -332,8 +347,11 @@ export function ChatWidget({
       const audioUrl = URL.createObjectURL(audioBlob);
       
       if (audioRef.current) {
+        clearAudioSource();
         audioRef.current.src = audioUrl;
-        audioRef.current.play();
+        audioRef.current.onended = clearAudioSource;
+        audioRef.current.onerror = clearAudioSource;
+        await audioRef.current.play();
       }
     } catch (error) {
       console.error("[Voice Speech Error]", error);
@@ -355,7 +373,7 @@ export function ChatWidget({
     // Stop any ongoing speech
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current.src = "";
+      clearAudioSource();
     }
     
     // Reset all voice states
@@ -370,7 +388,7 @@ export function ChatWidget({
     // Stop AI speaking
     if (audioRef.current && isSpeaking) {
       audioRef.current.pause();
-      audioRef.current.src = "";
+      clearAudioSource();
       setIsSpeaking(false);
     }
     
@@ -386,8 +404,10 @@ export function ChatWidget({
     
     try {
       setVoiceStatus("listening");
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      const stream = await navigator.mediaDevices.getUserMedia(
+        voiceCaptureConstraints
+      );
+      const mediaRecorder = new MediaRecorder(stream, getVoiceRecorderOptions());
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -416,7 +436,7 @@ export function ChatWidget({
         }
       };
 
-      mediaRecorder.start();
+      mediaRecorder.start(250);
       
       // Auto-stop after 30 seconds maximum
       setTimeout(() => {
@@ -467,6 +487,20 @@ export function ChatWidget({
       const data = await response.json();
       const text = data.text;
 
+      if (!text || text.trim().length === 0) {
+        console.warn("[Voice] No text transcribed from audio");
+        setVoiceStatus("idle");
+        // Resume listening if no text was captured
+        if (chatMode === "voice") {
+          setTimeout(() => {
+            startVoiceRecording();
+          }, 500);
+        }
+        return;
+      }
+
+      console.log("[Voice] Transcribed text:", text);
+
       // Automatically send the message
       await sendMessage({ text });
 
@@ -474,13 +508,19 @@ export function ChatWidget({
     } catch (error) {
       console.error("[Voice Transcription Error]", error);
       setVoiceStatus("idle");
+      // Resume listening on error
+      if (chatMode === "voice") {
+        setTimeout(() => {
+          startVoiceRecording();
+        }, 500);
+      }
     }
   }
 
   async function speakResponse(text: string) {
     setVoiceStatus("speaking");
     setIsSpeaking(true);
-    
+
     try {
       const response = await fetch("/api/voice/speak", {
         method: "POST",
@@ -489,15 +529,23 @@ export function ChatWidget({
       });
 
       if (!response.ok) {
+        console.error("[Voice Speech] API returned status:", response.status);
         throw new Error("Text-to-speech failed");
       }
 
       const audioBlob = await response.blob();
+      if (audioBlob.size === 0) {
+        console.error("[Voice Speech] Empty audio blob received");
+        throw new Error("Empty audio response");
+      }
+
       const audioUrl = URL.createObjectURL(audioBlob);
-      
+
       if (audioRef.current) {
+        clearAudioSource();
         audioRef.current.src = audioUrl;
         audioRef.current.onended = () => {
+          clearAudioSource();
           setIsSpeaking(false);
           // Auto-resume listening after AI finishes speaking (if voice mode is still active)
           if (chatMode === "voice") {
@@ -508,7 +556,20 @@ export function ChatWidget({
             setVoiceStatus("idle");
           }
         };
+        audioRef.current.onerror = (e) => {
+          console.error("[Voice Speech] Audio playback error:", e);
+          clearAudioSource();
+          setVoiceStatus("idle");
+          setIsSpeaking(false);
+          // Resume listening even on audio error
+          if (chatMode === "voice") {
+            setTimeout(() => {
+              startVoiceRecording();
+            }, 500);
+          }
+        };
         await audioRef.current.play();
+        console.log("[Voice Speech] Playing audio response");
       }
     } catch (error) {
       console.error("[Voice Speech Error]", error);
@@ -523,9 +584,32 @@ export function ChatWidget({
     }
   }
 
+  // Handle response timeout in voice mode
+  useEffect(() => {
+    if (chatMode !== "voice" || voiceStatus !== "processing") {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      console.warn("[Voice] Response timeout - no message received after 15 seconds");
+      setVoiceStatus("idle");
+      // Resume listening
+      if (chatMode === "voice") {
+        setTimeout(() => {
+          startVoiceRecording();
+        }, 500);
+      }
+    }, 15000);
+
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceStatus, chatMode]);
+
   // Auto-speak responses in voice mode
   useEffect(() => {
-    if (chatMode !== "voice" || isBusy || isSpeaking || !voiceActive) return;
+    if (chatMode !== "voice" || isBusy || isSpeaking || !voiceActive) {
+      return;
+    }
 
     const lastMessage = messages[messages.length - 1];
     if (lastMessage && lastMessage.role === "assistant") {
@@ -533,11 +617,14 @@ export function ChatWidget({
       if (lastProcessedMessageId.current === lastMessage.id) {
         return;
       }
-      
+
       const text = readMessageText(lastMessage);
       if (text) {
+        console.log("[Voice Mode] Speaking response:", text.slice(0, 50) + "...");
         lastProcessedMessageId.current = lastMessage.id;
         speakResponse(text);
+      } else {
+        console.warn("[Voice Mode] Assistant message has no text content");
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

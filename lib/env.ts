@@ -26,6 +26,30 @@ export function embeddingModelName() {
   return process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small";
 }
 
+export function transcriptionModelName() {
+  return process.env.OPENAI_TRANSCRIPTION_MODEL ?? "gpt-4o-mini-transcribe";
+}
+
+export function ttsModelName() {
+  return process.env.OPENAI_TTS_MODEL ?? "gpt-4o-mini-tts";
+}
+
+export function ttsVoiceName() {
+  return process.env.OPENAI_TTS_VOICE ?? "marin";
+}
+
+export function ttsResponseFormat() {
+  return process.env.OPENAI_TTS_FORMAT ?? "mp3";
+}
+
+export function realtimeModelName() {
+  return process.env.OPENAI_REALTIME_MODEL ?? "gpt-realtime-mini";
+}
+
+export function agentUseSmallModel() {
+  return process.env.AGENT_USE_SMALL_MODEL !== "false";
+}
+
 export function openaiApiKey() {
   return requireEnv("OPENAI_API_KEY");
 }

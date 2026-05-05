@@ -73,7 +73,7 @@ export function VoiceChatSettings({ initialEnabled, onSave }: VoiceChatSettingsP
               <strong>Features enabled:</strong> Speech-to-text, Text-to-speech, Continuous voice conversation, Voice interruption
             </p>
             <p className="mt-2 text-xs text-emerald-700">
-              Uses OpenAI Whisper-1 for transcription and TTS-1 for speech synthesis
+              Uses configurable OpenAI transcription, TTS, and Realtime voice models
             </p>
           </div>
         )}

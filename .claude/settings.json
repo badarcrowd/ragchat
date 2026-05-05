@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(npx eslint *)",
+      "Read(//Users/badarrashdi/development/crowd-website/app/public/wp-content/themes/crowd2024/templates/pages/**)",
+      "Read(//Users/badarrashdi/development/crowd-website/**)",
+      "Bash(pkill -f \"npm run dev\")",
+      "Bash(curl -s http://localhost:3000/embed)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
+    ]
+  }
+}

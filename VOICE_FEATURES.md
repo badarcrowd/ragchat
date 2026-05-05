@@ -115,7 +115,7 @@ Switch between modes anytime:
 6. **Optional**: Response spoken if voice enabled
 
 ### POST /api/voice/transcribe
-Converts audio to text using OpenAI Whisper.
+Converts audio to text using the configured OpenAI transcription model.
 
 **Request:**
 - Content-Type: `multipart/form-data`
@@ -129,7 +129,7 @@ Converts audio to text using OpenAI Whisper.
 ```
 
 ### POST /api/voice/speak
-Converts text to speech using OpenAI TTS.
+Converts text to speech using the configured OpenAI TTS model.
 
 **Request:**
 ```json
@@ -168,15 +168,19 @@ Converts text to speech using OpenAI TTS.
 ## Configuration
 
 Voice features use OpenAI API with these defaults:
-- **Transcription Model**: `whisper-1`
-- **TTS Model**: `tts-1`
-- **Voice**: `alloy`
+- **Transcription Model**: `gpt-4o-mini-transcribe`
+- **TTS Model**: `gpt-4o-mini-tts`
+- **Realtime Model**: `gpt-realtime-mini`
+- **Voice**: `marin`
 - **Speed**: `1.0`
 - **Language**: `en` (English)
 
 To customize, edit:
-- `/app/api/voice/transcribe/route.ts` - Speech-to-text settings
-- `/app/api/voice/speak/route.ts` - Text-to-speech settings
+- `OPENAI_TRANSCRIPTION_MODEL`
+- `OPENAI_TTS_MODEL`
+- `OPENAI_TTS_VOICE`
+- `OPENAI_REALTIME_MODEL`
+- `/app/api/voice/realtime-session/route.ts` - WebRTC session settings
 
 ## Environment Variables
 
@@ -184,6 +188,10 @@ Ensure `OPENAI_API_KEY` is set in your `.env.local`:
 
 ```env
 OPENAI_API_KEY=sk-...
+OPENAI_TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe
+OPENAI_TTS_MODEL=gpt-4o-mini-tts
+OPENAI_TTS_VOICE=marin
+OPENAI_REALTIME_MODEL=gpt-realtime-mini
 ```
 
 ## Usage
@@ -296,4 +304,4 @@ All colors dynamically applied from `/admin` settings.
 - Works on mobile and desktop browsers
 - Permission denied shows alert and disables voice mode
 - Transcription supports all Whisper languages (defaults to English detection)
-- TTS uses natural-sounding Alloy voice (customizable in API routes)
+- TTS uses a natural-sounding configured voice (customizable via environment variables)

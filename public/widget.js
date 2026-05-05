@@ -1,4 +1,5 @@
 (function () {
+  return; // widget disabled
   if (window.__agentRagWidgetLoaded) return;
   window.__agentRagWidgetLoaded = true;
 

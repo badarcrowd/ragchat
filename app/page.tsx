@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Bot, Database, LineChart } from "lucide-react";
+import { ArrowRight, Bot, Database, LineChart, Zap } from "lucide-react";
 
 export default function HomePage() {
   return (
@@ -20,6 +20,12 @@ export default function HomePage() {
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
+                href="/contact"
+                className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-3 text-sm font-semibold text-white"
+              >
+                <Zap className="h-4 w-4" /> Try Crowd Agent
+              </Link>
+              <Link
                 href="/chat"
                 className="inline-flex items-center gap-2 rounded-md bg-ink px-4 py-3 text-sm font-semibold text-white"
               >
@@ -35,6 +41,11 @@ export default function HomePage() {
           </div>
           <div className="grid gap-3">
             {[
+              {
+                icon: Zap,
+                title: "Crowd Agent",
+                body: "Voice-enabled AI consultant that audits sites, scores leads and books meetings."
+              },
               {
                 icon: Bot,
                 title: "Streaming RAG",

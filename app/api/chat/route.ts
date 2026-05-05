@@ -6,6 +6,7 @@ import {
 } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import type { OpenAIResponsesProviderOptions } from "@ai-sdk/openai";
 import { detectAndTranslateToEnglish } from "@/lib/ai/language";
 import { getChatModel } from "@/lib/ai/openai";
 import { getRequestIp, recordMessage, upsertSession } from "@/lib/analytics";
@@ -93,6 +94,20 @@ function isCasualGreeting(text: string): boolean {
   
   const trimmed = text.trim();
   return greetingPatterns.some(pattern => pattern.test(trimmed));
+}
+
+function getOpenAIOptions(
+  voiceMode: boolean,
+  tenantId: string
+): { openai: OpenAIResponsesProviderOptions } {
+  return {
+    openai: {
+      reasoningEffort: voiceMode ? "low" : "medium",
+      textVerbosity: voiceMode ? "low" : "medium",
+      promptCacheKey: `rag:${tenantId}:${voiceMode ? "voice" : "text"}`,
+      promptCacheRetention: "in_memory"
+    }
+  };
 }
 
 async function loadSettings(tenantId: string) {
@@ -266,6 +281,7 @@ export async function POST(request: Request) {
     settings.leadCaptureAfterMessages
   );
   const needsMeeting = wantsMeeting(latestText);
+  const providerOptions = getOpenAIOptions(voiceMode, tenantId);
 
   await upsertSession({
     sessionId,
@@ -293,7 +309,8 @@ export async function POST(request: Request) {
       model: getChatModel(voiceMode), // Use gpt-5.4-mini only for voice, gpt-5.5 for text
       system,
       messages: modelMessages,
-      maxOutputTokens: voiceMode ? 700 : 900 // Slightly shorter for voice
+      providerOptions,
+      maxOutputTokens: voiceMode ? 360 : 900 // Shorter responses keep voice turns snappy
     });
 
     // Sanitize output to remove potential PII
@@ -327,7 +344,8 @@ export async function POST(request: Request) {
     model: getChatModel(voiceMode), // Use gpt-5.4-mini only for voice, gpt-5.5 for text
     system,
     messages: modelMessages,
-    maxOutputTokens: voiceMode ? 700 : 900, // Slightly shorter for voice
+    providerOptions,
+    maxOutputTokens: voiceMode ? 360 : 900, // Shorter responses keep voice turns snappy
     onFinish: async ({ text, usage }) => {
       // Sanitize output before storing
       const sanitizedText = sanitizeOutput(text);
