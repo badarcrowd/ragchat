@@ -86,58 +86,43 @@ export async function OPTIONS() {
   });
 }
 
-export async function POST(req: NextRequest) {
-  const limited = await rateLimit(req, "voice-speak", 60, 60);
-  if (limited) return limited;
+async function synthesize(input: string) {
+  const model = ttsModelName();
+  const format = getSpeechFormat();
+  const key = cacheKey(input, format);
+  const cacheable = isCacheable(input);
+  const cached = cacheable ? ttsCache.get(key) : null;
 
-  try {
-    const { text } = await req.json();
-    const input = typeof text === "string" ? cleanSpeechText(text) : "";
+  if (cached) {
+    return new NextResponse(bodyFromBuffer(cached), {
+      headers: {
+        ...CORS_HEADERS,
+        "Content-Type": AUDIO_MIME_TYPES[format],
+        "Content-Length": cached.length.toString(),
+        "Cache-Control": "no-store",
+        "X-Voice-Cache": "hit"
+      }
+    });
+  }
 
-    if (!input) {
-      return NextResponse.json(
-        { error: "No text provided" },
-        { status: 400 }
-      );
-    }
+  const speechParams: SpeechCreateParams = {
+    model,
+    voice: ttsVoiceName(),
+    input,
+    speed: 1.04,
+    response_format: format
+  };
 
-    const model = ttsModelName();
-    const format = getSpeechFormat();
-    const key = cacheKey(input, format);
-    const cached = isCacheable(input) ? ttsCache.get(key) : null;
+  if (!model.startsWith("tts-1")) {
+    speechParams.instructions =
+      "Speak warmly, clearly, and professionally. Keep the delivery concise and helpful for a website visitor.";
+  }
 
-    if (cached) {
-      return new NextResponse(bodyFromBuffer(cached), {
-        headers: {
-          ...CORS_HEADERS,
-          "Content-Type": AUDIO_MIME_TYPES[format],
-          "Content-Length": cached.length.toString(),
-          "Cache-Control": "no-store",
-          "X-Voice-Cache": "hit"
-        }
-      });
-    }
-
-    const speechParams: SpeechCreateParams = {
-      model,
-      voice: ttsVoiceName(),
-      input,
-      speed: 1.04,
-      response_format: format
-    };
-
-    if (!model.startsWith("tts-1")) {
-      speechParams.instructions =
-        "Speak warmly, clearly, and professionally. Keep the delivery concise and helpful for a website visitor.";
-    }
-
-    const audio = await openaiClient.audio.speech.create(speechParams);
+  const audio = await openaiClient.audio.speech.create(speechParams);
+  const body = audio.body;
+  if (!body) {
     const buffer = Buffer.from(await audio.arrayBuffer());
-
-    if (isCacheable(input)) {
-      rememberAudio(key, buffer);
-    }
-
+    if (cacheable) rememberAudio(key, buffer);
     return new NextResponse(bodyFromBuffer(buffer), {
       headers: {
         ...CORS_HEADERS,
@@ -147,11 +132,80 @@ export async function POST(req: NextRequest) {
         "X-Voice-Cache": "miss"
       }
     });
+  }
+
+  // Tee the upstream stream: one branch streams to the client immediately,
+  // the other accumulates for the in-memory cache so future hits are instant.
+  const [clientStream, cacheStream] = body.tee();
+  if (cacheable) {
+    (async () => {
+      try {
+        const reader = cacheStream.getReader();
+        const chunks: Uint8Array[] = [];
+        let total = 0;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            chunks.push(value);
+            total += value.byteLength;
+          }
+        }
+        const merged = new Uint8Array(total);
+        let offset = 0;
+        for (const chunk of chunks) {
+          merged.set(chunk, offset);
+          offset += chunk.byteLength;
+        }
+        rememberAudio(key, Buffer.from(merged));
+      } catch {
+        // ignore caching errors — playback already succeeded
+      }
+    })();
+  } else {
+    cacheStream.cancel().catch(() => {});
+  }
+
+  return new NextResponse(clientStream, {
+    headers: {
+      ...CORS_HEADERS,
+      "Content-Type": AUDIO_MIME_TYPES[format],
+      "Cache-Control": "no-store",
+      "X-Voice-Cache": "miss"
+    }
+  });
+}
+
+export async function POST(req: NextRequest) {
+  const limited = await rateLimit(req, "voice-speak", 60, 60);
+  if (limited) return limited;
+
+  try {
+    const { text } = await req.json();
+    const input = typeof text === "string" ? cleanSpeechText(text) : "";
+    if (!input) {
+      return NextResponse.json({ error: "No text provided" }, { status: 400 });
+    }
+    return await synthesize(input);
   } catch (error) {
     console.error("[Voice Speech Error]", error);
-    return NextResponse.json(
-      { error: "Failed to generate speech" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to generate speech" }, { status: 500 });
+  }
+}
+
+export async function GET(req: NextRequest) {
+  const limited = await rateLimit(req, "voice-speak", 60, 60);
+  if (limited) return limited;
+
+  try {
+    const text = req.nextUrl.searchParams.get("t") ?? "";
+    const input = cleanSpeechText(text);
+    if (!input) {
+      return NextResponse.json({ error: "No text provided" }, { status: 400 });
+    }
+    return await synthesize(input);
+  } catch (error) {
+    console.error("[Voice Speech Error]", error);
+    return NextResponse.json({ error: "Failed to generate speech" }, { status: 500 });
   }
 }

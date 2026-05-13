@@ -57,7 +57,7 @@ const FIELD_LABELS: Partial<Record<keyof LeadFormData, string>> = {
 };
 
 const GREETING_TEXT =
-  "Happy to help. I can run a quick analysis for you — just send over your website, work email, and contact number with country code, and I'll take it from there.";
+  "Hi, I'm Aria from Crowd Digital. Happy to help — could I start with your name?";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -129,25 +129,16 @@ function useTTS() {
 
     setIsSpeaking(true);
     try {
-      const res = await fetch("/api/voice/speak", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: clean }),
-      });
-      if (!res.ok) throw new Error("TTS failed");
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
+      const audio = new Audio();
+      audio.preload = "auto";
+      audio.src = `/api/voice/speak?t=${encodeURIComponent(clean)}`;
       audioRef.current = audio;
 
       audio.onended = () => {
-        URL.revokeObjectURL(url);
         setIsSpeaking(false);
         audioRef.current = null;
       };
       audio.onerror = () => {
-        URL.revokeObjectURL(url);
         setIsSpeaking(false);
         audioRef.current = null;
       };

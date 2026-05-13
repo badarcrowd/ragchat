@@ -54,7 +54,7 @@ const CF7_FIELD_MAP: Record<string, string> = {
 };
 
 const GREETING_TEXT =
-  "Happy to help. I can run a quick analysis for you — just send over your website, work email, and contact number with country code, and I'll take it from there.";
+  "Hi, I'm Aria from Crowd Digital. Happy to help — could I start with your name?";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -103,57 +103,32 @@ function useTTS(onSpeakingEnded?: () => void) {
   }
 
   async function speak(text: string) {
-    console.log("[Agent TTS] Speak called with:", text?.slice(0, 30) + "...");
-    if (mutedRef.current || !text.trim()) {
-      console.log("[Agent TTS] Skipping: muted or empty text");
-      return;
-    }
+    if (mutedRef.current || !text.trim()) return;
     stopAudio();
     const clean = stripMarkdown(text);
-    if (!clean) {
-      console.warn("[Agent TTS] No text after markdown stripping");
-      return;
-    }
-    console.log("[Agent TTS] Clean text:", clean?.slice(0, 30) + "...");
+    if (!clean) return;
+
     setIsSpeaking(true);
     try {
-      console.log("[Agent TTS] Requesting audio from API...");
-      const res = await fetch("/api/voice/speak", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: clean }),
-      });
-      if (!res.ok) {
-        console.error("[Agent TTS] API error:", res.status, res.statusText);
-        throw new Error("TTS failed");
-      }
-      const blob = await res.blob();
-      console.log("[Agent TTS] Received audio blob:", blob.size, "bytes");
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
+      const audio = new Audio();
+      audio.preload = "auto";
+      audio.src = `/api/voice/speak?t=${encodeURIComponent(clean)}`;
       audioRef.current = audio;
+
       audio.onended = () => {
-        console.log("[Agent TTS] Audio finished playing");
-        URL.revokeObjectURL(url);
         setIsSpeaking(false);
         audioRef.current = null;
-        // Call the speaking-ended callback
         onSpeakingEnded?.();
       };
-      audio.onerror = (e) => {
-        console.error("[Agent TTS] Audio error:", e);
-        URL.revokeObjectURL(url);
+      audio.onerror = () => {
         setIsSpeaking(false);
         audioRef.current = null;
-        // Still call the callback on error so listening can resume
         onSpeakingEnded?.();
       };
-      console.log("[Agent TTS] Playing audio...");
+
       await audio.play();
-    } catch (error) {
-      console.error("[Agent TTS] Error:", error);
+    } catch {
       setIsSpeaking(false);
-      // Call callback on fetch error too
       onSpeakingEnded?.();
     }
   }
