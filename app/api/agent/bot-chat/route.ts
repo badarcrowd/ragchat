@@ -158,10 +158,45 @@ export async function POST(request: Request) {
     rfp:        "rfp"
   };
 
+  // Canonical field order — mirrors the system prompt's PROGRESSIVE FIELDS list.
+  // The model uses this + leadData to know exactly which question comes next,
+  // instead of asking "what's next on the form?".
+  const FIELD_ORDER: { keys: string[]; ask: string }[] = [
+    { keys: ["first_name"], ask: "Greet warmly and ask for the visitor's name." },
+    { keys: ["email", "company", "website"], ask: "Ask for work email, company name, and website URL together in ONE warm message so the analysis can start." },
+    { keys: ["sector"], ask: "Ask: 'By the way, what industry are you in?'" },
+    { keys: ["location"], ask: "Ask: 'Which Crowd office should we route this through — Middle East, USA, Europe, or Asia?'" },
+    { keys: ["business"], ask: "Ask about the core business or marketing challenge to solve." },
+    { keys: ["success"], ask: "Ask what success looks like for this project." },
+    { keys: ["cost"], ask: "Ask about the available budget." },
+    { keys: ["start"], ask: "Ask when they're looking to start." },
+    { keys: ["rfp"], ask: "Ask whether this is part of an RFP process." },
+    { keys: ["phone"], ask: "Last thing — ask for the best contact number with country code." }
+  ];
+
+  const capturedKeys = new Set(
+    Object.entries(leadData)
+      .filter(([, v]) => v && String(v).trim())
+      .map(([k]) => k)
+  );
+  const isCaptured = (k: string) => capturedKeys.has(k) || capturedKeys.has(CF7_MAP[k] ?? k);
+  const nextStep = FIELD_ORDER.find((step) => !step.keys.every(isCaptured));
+
+  const capturedSummary = [...capturedKeys]
+    .map((k) => `- ${k}: ${leadData[k]}`)
+    .join("\n");
+  const stateBlock = `\n\nCURRENT LEAD STATE (do not re-ask any of these):\n${
+    capturedSummary || "(nothing captured yet)"
+  }\n\nNEXT FIELD TO COLLECT: ${
+    nextStep
+      ? nextStep.ask
+      : "All fields collected — confirm completion warmly: \"You're all set, [name]. The Crowd team will be in touch very soon.\""
+  }`;
+
   try {
     const result = await generateText({
       model: getChatModel(true),
-      system: BOT_SYSTEM_PROMPT,
+      system: BOT_SYSTEM_PROMPT + stateBlock,
       messages,
       stopWhen: stepCountIs(2),   // ONE tool call max → then text. Prevents chaining.
       maxRetries: 1,
@@ -236,12 +271,21 @@ export async function POST(request: Request) {
     // maxSteps:2, but guard anyway), do a plain follow-up call with no tools.
     let responseText = result.text?.trim();
     if (!responseText) {
+      // Recompute next field using the freshly captured cf7Fields so the
+      // fallback question is correct even after this turn's tool call.
+      const mergedKeys = new Set([...capturedKeys, ...Object.keys(cf7Fields)]);
+      const isCapturedNow = (k: string) =>
+        mergedKeys.has(k) || mergedKeys.has(CF7_MAP[k] ?? k);
+      const nextNow = FIELD_ORDER.find((step) => !step.keys.every(isCapturedNow));
+      const freshAsk = nextNow
+        ? nextNow.ask
+        : "All fields collected — confirm completion warmly: \"You're all set, [name]. The Crowd team will be in touch very soon.\"";
+
       const fallback = await generateText({
         model: getChatModel(true),
-        system: BOT_SYSTEM_PROMPT,
+        system: `${BOT_SYSTEM_PROMPT}\n\nNEXT FIELD TO COLLECT: ${freshAsk}`,
         messages: [
           ...messages,
-          // Summarise what was just stored so the AI knows where to continue
           {
             role: "assistant" as const,
             content: `[System: just stored fields: ${Object.keys(cf7Fields).join(", ") || "none"}]`
@@ -251,7 +295,7 @@ export async function POST(request: Request) {
         providerOptions,
         maxOutputTokens: 120
       });
-      responseText = fallback.text?.trim() || "Thanks! What's next on the form?";
+      responseText = fallback.text?.trim() || (nextNow ? freshAsk : "You're all set. The Crowd team will be in touch very soon.");
     }
 
     const allLeadData = { ...leadData, ...cf7Fields };
