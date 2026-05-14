@@ -66,8 +66,14 @@ Never invent or call any other tool name.
 # DYNAMIC STATE INJECTION
 On every turn the system appends two blocks to this prompt:
 - CURRENT LEAD STATE — fields already captured. Treat these as authoritative. Never re-ask any field listed there.
-- NEXT FIELD TO COLLECT — the single instruction for what to ask next. Follow it verbatim in spirit (you may rephrase warmly, but do not skip ahead, do not collapse multiple steps, and do not invent your own next question).
+- NEXT FIELD TO COLLECT — INTERNAL DEVELOPER GUIDANCE for what to ask next. NEVER read this text aloud, NEVER repeat it verbatim, NEVER prefix your reply with "Ask…" or "Ask for…". It tells you which field(s) to request — you must phrase the actual question warmly in your own words as a direct, conversational question to the visitor.
 If NEXT FIELD says "All fields collected", close warmly: "You're all set, [first name]. The Crowd team will be in touch very soon."
+
+EXAMPLES of correct rephrasing:
+- Guidance: "Ask only for the best work email to reach them on." → Reply: "Got the website. What's the best email to reach you on?"
+- Guidance: "The website is in. Ask warmly for the work email and company name in one short message." → Reply: "Perfect, got the site. Could I grab your work email and company name?"
+- Guidance: "Ask casually what industry they're in." → Reply: "By the way, what industry are you in?"
+NEVER reply with the guidance text itself. The visitor must never see words like "Ask for…", "ONE warm message", or any developer phrasing.
 
 # CONVERSATIONAL FLOW (REFERENCE)
 The NEXT FIELD instruction always wins. The list below is the order it follows so you can anticipate context:
@@ -191,17 +197,42 @@ export async function POST(request: Request) {
   // Canonical field order — mirrors the system prompt's PROGRESSIVE FIELDS list.
   // The model uses this + leadData to know exactly which question comes next,
   // instead of asking "what's next on the form?".
-  const FIELD_ORDER: { keys: string[]; ask: string }[] = [
-    { keys: ["first_name"], ask: "Greet warmly and ask for the visitor's name." },
-    { keys: ["email", "company", "website"], ask: "Ask for work email, company name, and website URL together in ONE warm message so the analysis can start." },
-    { keys: ["sector"], ask: "Ask: 'By the way, what industry are you in?'" },
-    { keys: ["location"], ask: "Ask: 'Which Crowd office should we route this through — Middle East, USA, Europe, or Asia?'" },
+  // `ask` is GUIDANCE for the model — it should rephrase warmly, never echo verbatim.
+  // For multi-key steps, `askForMissing` returns a focused instruction based on
+  // which keys are still outstanding, so we never ask for already-captured fields.
+  type Step = {
+    keys: string[];
+    ask: string;
+    askForMissing?: (missing: string[]) => string;
+  };
+  const FIELD_ORDER: Step[] = [
+    {
+      keys: ["first_name"],
+      ask: "Greet warmly and ask for the visitor's first name."
+    },
+    {
+      keys: ["email", "company", "website"],
+      ask: "Ask for work email, company name, and website URL together in ONE warm message so the analysis can start.",
+      askForMissing: (missing) => {
+        const m = new Set(missing);
+        if (m.size === 3) return "Ask warmly for work email, company name, and website URL in ONE short message so the analysis can begin.";
+        if (m.has("email") && m.has("company")) return "The website is in. Ask warmly for the work email and company name in one short message.";
+        if (m.has("email") && m.has("website")) return "The company is noted. Ask warmly for the work email and website URL in one short message.";
+        if (m.has("company") && m.has("website")) return "The email is in. Ask warmly for the company name and website URL in one short message.";
+        if (m.has("email")) return "Ask only for the best work email to reach them on.";
+        if (m.has("company")) return "Ask only which company they're working with.";
+        if (m.has("website")) return "Ask only for their website URL so the analysis can begin.";
+        return "Continue to the next step.";
+      }
+    },
+    { keys: ["sector"], ask: "Ask casually what industry they're in." },
+    { keys: ["location"], ask: "Ask which Crowd office should handle this — Middle East, USA, Europe, or Asia." },
     { keys: ["business"], ask: "Ask about the core business or marketing challenge to solve." },
     { keys: ["success"], ask: "Ask what success looks like for this project." },
-    { keys: ["cost"], ask: "Ask about the available budget." },
+    { keys: ["cost"], ask: "Ask about the available budget for this project." },
     { keys: ["start"], ask: "Ask when they're looking to start." },
     { keys: ["rfp"], ask: "Ask whether this is part of an RFP process." },
-    { keys: ["phone"], ask: "Last thing — ask for the best contact number with country code." }
+    { keys: ["phone"], ask: "Ask for the best contact number with country code, framed as the last thing before handoff." }
   ];
 
   const capturedKeys = new Set(
@@ -211,16 +242,19 @@ export async function POST(request: Request) {
   );
   const isCaptured = (k: string) => capturedKeys.has(k) || capturedKeys.has(CF7_MAP[k] ?? k);
   const nextStep = FIELD_ORDER.find((step) => !step.keys.every(isCaptured));
+  const nextAsk = nextStep
+    ? (nextStep.askForMissing
+        ? nextStep.askForMissing(nextStep.keys.filter((k) => !isCaptured(k)))
+        : nextStep.ask)
+    : null;
 
   const capturedSummary = [...capturedKeys]
     .map((k) => `- ${k}: ${leadData[k]}`)
     .join("\n");
   const stateBlock = `\n\nCURRENT LEAD STATE (do not re-ask any of these):\n${
     capturedSummary || "(nothing captured yet)"
-  }\n\nNEXT FIELD TO COLLECT: ${
-    nextStep
-      ? nextStep.ask
-      : "All fields collected — confirm completion warmly: \"You're all set, [name]. The Crowd team will be in touch very soon.\""
+  }\n\nNEXT FIELD TO COLLECT (this is GUIDANCE — rephrase warmly in your own words, never echo this text verbatim): ${
+    nextAsk ?? "All fields collected — confirm completion warmly: \"You're all set, [name]. The Crowd team will be in touch very soon.\""
   }`;
 
   try {
@@ -308,7 +342,9 @@ export async function POST(request: Request) {
         mergedKeys.has(k) || mergedKeys.has(CF7_MAP[k] ?? k);
       const nextNow = FIELD_ORDER.find((step) => !step.keys.every(isCapturedNow));
       const freshAsk = nextNow
-        ? nextNow.ask
+        ? (nextNow.askForMissing
+            ? nextNow.askForMissing(nextNow.keys.filter((k) => !isCapturedNow(k)))
+            : nextNow.ask)
         : "All fields collected — confirm completion warmly: \"You're all set, [name]. The Crowd team will be in touch very soon.\"";
 
       const fallback = await generateText({
